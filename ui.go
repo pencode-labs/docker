@@ -13,6 +13,15 @@ import (
 var themeCSS string
 
 var actionLabels = map[string]string{"start": "启动", "stop": "停止", "restart": "重启"}
+var actionIcons = map[string]string{"start": "debug-start", "stop": "debug-stop", "restart": "refresh-cw"}
+
+func iconButton(b *strings.Builder, ref, icon, label string, disabled bool) {
+	fmt.Fprintf(b, `<button class="docker-icon-button" data-ref="%s" type="button" title="%s" aria-label="%s"`, ref, label, label)
+	if disabled {
+		b.WriteString(` disabled`)
+	}
+	fmt.Fprintf(b, `><img data-ref="%s-icon" data-pencode-icon="%s" alt=""></button>`, ref, icon)
+}
 
 func errorView(message string) *peb.EditorView {
 	return &peb.EditorView{HTML: `<p class="docker-error" role="alert">` + html.EscapeString(message) + `</p>`, CSS: themeCSS}
@@ -21,11 +30,9 @@ func errorView(message string) *peb.EditorView {
 func (m *manager) showList() error {
 	var b strings.Builder
 	b.Grow(512 + len(m.containers)*1000)
-	b.WriteString(`<section class="docker-manager"><header><div><strong>容器</strong><span class="docker-muted"> · 当前 Docker context</span></div><button data-ref="refresh" type="button"`)
-	if m.listLoading {
-		b.WriteString(` disabled`)
-	}
-	b.WriteString(`>刷新</button></header><div class="docker-notice" data-ref="notice" data-pencode-region>`)
+	b.WriteString(`<section class="docker-manager"><header><div><strong>容器</strong><span class="docker-muted"> · 当前 Docker context</span></div>`)
+	iconButton(&b, "refresh", "refresh-cw", "刷新容器列表", m.listLoading)
+	b.WriteString(`</header><div class="docker-notice" data-ref="notice" data-pencode-region>`)
 	for _, message := range []string{m.operationError, m.listError} {
 		if message != "" {
 			b.WriteString(`<p class="docker-error" role="alert">` + html.EscapeString(message) + `</p>`)
@@ -56,11 +63,7 @@ func (m *manager) showList() error {
 		events = append(events, peb.EditorBinding{Ref: "logs:" + c.ID, Kind: "click"})
 		for _, action := range [...]string{"start", "stop", "restart"} {
 			ref := action + ":" + c.ID
-			fmt.Fprintf(&b, `<button data-ref="%s" type="button" title="%s容器"`, ref, actionLabels[action])
-			if m.busyID != "" || !c.allows(action) {
-				b.WriteString(` disabled`)
-			}
-			b.WriteString(`>` + actionLabels[action] + `</button>`)
+			iconButton(&b, ref, actionIcons[action], actionLabels[action]+"容器", m.busyID != "" || !c.allows(action))
 			events = append(events, peb.EditorBinding{Ref: ref, Kind: "click"})
 		}
 		b.WriteString(`</div></article>`)
@@ -75,11 +78,15 @@ func (m *manager) showList() error {
 func (m *manager) showLogs() error {
 	var b strings.Builder
 	b.Grow(len(m.logs) + 768)
-	label := "暂停自动刷新"
+	label, icon := "暂停自动刷新", "debug-pause"
 	if m.paused {
-		label = "恢复自动刷新"
+		label, icon = "恢复自动刷新", "debug-start"
 	}
-	b.WriteString(`<section class="docker-logs"><header><button data-ref="back" type="button">容器列表</button><strong>` + html.EscapeString(m.selected.Names) + `</strong><span class="docker-muted">最近 300 行 · 含时间戳</span><div class="docker-actions"><button data-ref="pause" type="button">` + label + `</button><button data-ref="refresh-logs" type="button">刷新</button></div></header><div data-ref="log-notice" data-pencode-region>`)
+	b.WriteString(`<section class="docker-logs" data-pencode-layout="fill"><header class="docker-log-header"><strong class="docker-log-title">Docker 日志 · ` + html.EscapeString(m.selected.Names) + `</strong><span class="docker-log-hint docker-muted">最近 300 行 · 含时间戳</span><div class="docker-actions" role="group" aria-label="日志操作">`)
+	iconButton(&b, "back", "list-collapse", "容器列表", false)
+	iconButton(&b, "pause", icon, label, false)
+	iconButton(&b, "refresh-logs", "refresh-cw", "刷新日志", false)
+	b.WriteString(`</div></header><div class="docker-log-scroll" data-ref="log-scroll" data-pencode-scroll="end" data-pencode-scroll-key="` + m.selected.ID + `" data-pencode-selectable><div data-ref="log-notice" data-pencode-region>`)
 	if m.logError != "" {
 		b.WriteString(`<p class="docker-error" role="alert">` + html.EscapeString(m.logError) + `</p>`)
 	}
@@ -90,7 +97,7 @@ func (m *manager) showLogs() error {
 		}
 		b.WriteString(`<p class="docker-muted" role="status">` + message + `</p>`)
 	}
-	b.WriteString(`</div><div class="docker-log-scroll" data-ref="log-scroll" data-pencode-scroll="end" data-pencode-scroll-key="` + m.selected.ID + `" data-pencode-selectable><pre data-ref="log-output" data-pencode-region>`)
+	b.WriteString(`</div><pre data-ref="log-output" data-pencode-region>`)
 	b.WriteString(html.EscapeString(m.logs))
 	b.WriteString(`</pre></div></section>`)
 	return m.publisher.Show(peb.UI{ID: "logs", Title: "Docker 日志 · " + m.selected.Names, Kind: peb.Panel, Context: m.logContext,
