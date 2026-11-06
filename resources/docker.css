@@ -10,20 +10,36 @@
 .docker-manager .docker-icon-button:hover, .docker-logs .docker-icon-button:hover { background: var(--vscode-toolbar-hoverBackground); }
 .docker-icon-button img { width: 16px; height: 16px; }
 .docker-muted { color: var(--vscode-descriptionForeground); font-size: 12px; overflow-wrap: anywhere; }
-.docker-containers { flex: 1; min-height: 0; overflow: auto; }
-.docker-container { display: flex; align-items: center; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--vscode-editorGroup-border); }
-.docker-manager .docker-summary { display: block; flex: 1; min-width: 0; padding: 8px; text-align: left; color: var(--vscode-editor-foreground); background: transparent; }
-.docker-manager .docker-summary:hover { background: var(--vscode-list-hoverBackground); }
-.docker-name { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 4px; overflow-wrap: anywhere; }
-.docker-state { color: var(--vscode-descriptionForeground); font-size: 11px; }
+.docker-table { display: flex; flex-direction: column; flex: 1; min-width: 0; min-height: 0; }
+.docker-row { display: grid; grid-template-columns: 24px 1.25fr 1.2fr 1.1fr 94px; grid-template-rows: 1fr; align-items: center; min-width: 0; height: 40px; box-sizing: border-box; border-bottom: 1px solid var(--vscode-editorGroup-border); }
+.docker-row > [role="cell"], .docker-row > [role="columnheader"] { min-width: 0; padding: 0 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.docker-table-head { flex-shrink: 0; height: 34px; padding-right: 12px; color: var(--vscode-descriptionForeground); font-size: 12px; font-weight: 500; }
+.docker-table-head > [role="columnheader"] { border-right: 1px solid var(--vscode-editorGroup-border); }
+.docker-table-head > [role="columnheader"]:last-child { border-right: 0; }
+.docker-containers { flex: 1; min-width: 0; min-height: 0; overflow: auto; padding-right: 12px; box-sizing: border-box; }
+.docker-container:hover { background: var(--vscode-list-hoverBackground); }
+.docker-manager .docker-name { display: block; width: 100%; padding: 4px 0; text-align: left; color: var(--vscode-editor-foreground); background: transparent; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.docker-manager .docker-name:hover { color: var(--vscode-textLink-activeForeground); text-decoration: underline; }
+.docker-status { color: var(--vscode-descriptionForeground); font-size: 12px; }
+.docker-ports { font-size: 12px; }
+.docker-state { color: var(--vscode-descriptionForeground); }
+.docker-state-dot { display: block; width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
 .docker-state-running { color: var(--vscode-testing-iconPassed); }
 .docker-state-exited, .docker-state-dead { color: var(--vscode-errorForeground); }
 .docker-state-paused, .docker-state-restarting { color: var(--vscode-editorWarning-foreground); }
 .docker-actions { display: flex; flex-wrap: wrap; gap: 6px; flex-shrink: 0; }
+.docker-container > .docker-actions { flex-wrap: nowrap; justify-content: center; gap: 0; padding: 0 4px; border-left: 1px solid var(--vscode-editorGroup-border); }
+.docker-container .docker-icon-button { box-sizing: border-box; border-radius: 0; }
+.docker-container .docker-icon-button:first-child { border-radius: 4px 0 0 4px; }
+.docker-container .docker-icon-button:last-child { border-radius: 0 4px 4px 0; }
+.docker-container [data-ref^="start:"] { color: var(--vscode-testing-iconPassed); background: var(--vscode-diffEditor-insertedLineBackground); }
+.docker-container [data-ref^="stop:"] { color: var(--vscode-errorForeground); background: var(--vscode-diffEditor-removedLineBackground); }
+.docker-container [data-ref^="restart:"] { color: var(--vscode-notificationsWarningIcon-foreground); background: color-mix(in srgb, var(--vscode-notificationsWarningIcon-foreground) 18%, transparent); }
 .docker-log-header { display: flex; align-items: center; flex: 0 0 auto; min-height: 34px; box-sizing: border-box; gap: 12px; padding: 4px 40px 4px 12px; border-bottom: 1px solid var(--vscode-editorGroup-border); }
 .docker-log-title, .docker-log-hint { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .docker-log-title { font-weight: 500; }
 .docker-log-header .docker-actions { flex-wrap: nowrap; margin-left: auto; gap: 2px; }
+.docker-log-header [data-ref="back-icon"] { transform: rotate(180deg); }
 .docker-empty { padding: 48px 16px; text-align: center; color: var(--vscode-descriptionForeground); }
 .docker-error { padding: 8px; color: var(--vscode-errorForeground); background: var(--vscode-inputValidation-errorBackground); border: 1px solid var(--vscode-inputValidation-errorBorder); white-space: pre-wrap; overflow-wrap: anywhere; }
 .docker-manager footer { padding-top: 12px; }

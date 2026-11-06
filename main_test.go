@@ -78,7 +78,7 @@ func TestContainerLifecycleAndLogs(t *testing.T) {
 	}
 	waitFor(t, func() bool {
 		ui := publisher.latest("containers")
-		return ui.View != nil && strings.Contains(ui.View.HTML, "nginx:latest")
+		return ui.View != nil && strings.Contains(ui.View.HTML, `data-ref="logs:`+testID+`"`)
 	})
 	ui := publisher.latest("containers")
 	if ui.Kind != peb.Popup || ui.Context.ProjectPath != "/workspace" || ui.Anchor != "containers" {
@@ -150,7 +150,7 @@ func TestClosingCancelsPendingList(t *testing.T) {
 	if app.listOpen || app.listLoading || app.listGeneration != 1 {
 		t.Fatal("closing must cancel and invalidate the request")
 	}
-	if strings.Contains(publisher.latest("containers").View.HTML, "nginx:latest") {
+	if strings.Contains(publisher.latest("containers").View.HTML, `data-ref="logs:`+testID+`"`) {
 		t.Fatal("late list response was applied")
 	}
 }

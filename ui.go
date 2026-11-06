@@ -15,6 +15,29 @@ var themeCSS string
 var actionLabels = map[string]string{"start": "启动", "stop": "停止", "restart": "重启"}
 var actionIcons = map[string]string{"start": "debug-start", "stop": "debug-stop", "restart": "refresh-cw"}
 
+func mappedPorts(ports string) string {
+	allMapped := true
+	for port := range strings.SplitSeq(ports, ",") {
+		if !strings.Contains(port, "->") {
+			allMapped = false
+			break
+		}
+	}
+	if allMapped {
+		return ports
+	}
+	var b strings.Builder
+	for port := range strings.SplitSeq(ports, ",") {
+		if strings.Contains(port, "->") {
+			if b.Len() != 0 {
+				b.WriteString(", ")
+			}
+			b.WriteString(strings.TrimSpace(port))
+		}
+	}
+	return b.String()
+}
+
 func iconButton(b *strings.Builder, ref, icon, label string, disabled bool) {
 	fmt.Fprintf(b, `<button class="docker-icon-button" data-ref="%s" type="button" title="%s" aria-label="%s"`, ref, label, label)
 	if disabled {
@@ -41,7 +64,7 @@ func (m *manager) showList() error {
 	if m.busyID != "" {
 		b.WriteString(`<p class="docker-muted" role="status">正在` + actionLabels[m.busyAction] + `容器…</p>`)
 	}
-	b.WriteString(`</div><div class="docker-containers" data-ref="container-list" data-pencode-scroll="preserve" data-pencode-region>`)
+	b.WriteString(`</div><div class="docker-table" role="table" aria-label="Docker 容器"><div class="docker-row docker-table-head" role="row"><span role="columnheader" aria-label="状态"></span><span role="columnheader">名称</span><span role="columnheader">端口</span><span role="columnheader">运行状态</span><span role="columnheader">操作</span></div><div class="docker-containers" role="rowgroup" data-ref="container-list" data-pencode-scroll="preserve" data-pencode-region>`)
 	events := make([]peb.EditorBinding, 1, 1+len(m.containers)*4)
 	events[0] = peb.EditorBinding{Ref: "refresh", Kind: "click"}
 	if len(m.containers) == 0 {
@@ -55,20 +78,21 @@ func (m *manager) showList() error {
 	}
 	for _, c := range m.containers {
 		state := html.EscapeString(c.State)
-		fmt.Fprintf(&b, `<article class="docker-container"><button class="docker-summary" data-ref="logs:%s" type="button" title="查看容器日志"><div class="docker-name"><span class="docker-state docker-state-%s">%s</span><strong>%s</strong></div><div class="docker-muted">%s · %s</div><div class="docker-muted">%s</div>`, c.ID, state, state, html.EscapeString(c.Names), html.EscapeString(c.Image), c.ID[:12], html.EscapeString(c.Status))
-		if c.Ports != "" {
-			b.WriteString(`<div class="docker-muted">` + html.EscapeString(c.Ports) + `</div>`)
+		name := html.EscapeString(c.Names)
+		ports, status := html.EscapeString(mappedPorts(c.Ports)), html.EscapeString(c.Status)
+		if ports == "" {
+			ports = "—"
 		}
-		b.WriteString(`</button><div class="docker-actions">`)
+		fmt.Fprintf(&b, `<div class="docker-row docker-container" role="row"><span class="docker-state docker-state-%s" role="cell" title="%s" aria-label="%s"><span class="docker-state-dot" aria-hidden="true"></span></span><div role="cell"><button class="docker-name" data-ref="logs:%s" type="button" title="查看日志 · %s">%s</button></div><span class="docker-ports" role="cell" title="%s">%s</span><span class="docker-status" role="cell" title="%s">%s</span><div class="docker-actions" role="cell">`, state, state, state, c.ID, name, name, ports, ports, status, status)
 		events = append(events, peb.EditorBinding{Ref: "logs:" + c.ID, Kind: "click"})
 		for _, action := range [...]string{"start", "stop", "restart"} {
 			ref := action + ":" + c.ID
 			iconButton(&b, ref, actionIcons[action], actionLabels[action]+"容器", m.busyID != "" || !c.allows(action))
 			events = append(events, peb.EditorBinding{Ref: ref, Kind: "click"})
 		}
-		b.WriteString(`</div></article>`)
+		b.WriteString(`</div></div>`)
 	}
-	b.WriteString(`</div><footer class="docker-muted">点击容器查看日志 · 每 3 秒自动刷新 · `)
+	b.WriteString(`</div></div><footer class="docker-muted">点击名称查看日志 · 每 3 秒自动刷新 · `)
 	fmt.Fprintf(&b, `%d 个容器</footer></section>`, len(m.containers))
 	return m.publisher.Show(peb.UI{ID: "containers", Title: "Docker 容器", Kind: peb.Popup, Anchor: "containers", Context: m.listContext,
 		CloseOnOutsideClick: true, Placement: peb.UIPlacement{Mode: peb.PositionAnchor, X: -700, Y: 8, Width: 740, Height: 540},
@@ -83,7 +107,7 @@ func (m *manager) showLogs() error {
 		label, icon = "恢复自动刷新", "debug-start"
 	}
 	b.WriteString(`<section class="docker-logs" data-pencode-layout="fill"><header class="docker-log-header"><strong class="docker-log-title">Docker 日志 · ` + html.EscapeString(m.selected.Names) + `</strong><span class="docker-log-hint docker-muted">最近 300 行 · 含时间戳</span><div class="docker-actions" role="group" aria-label="日志操作">`)
-	iconButton(&b, "back", "list-collapse", "容器列表", false)
+	iconButton(&b, "back", "arrow-right", "容器列表", false)
 	iconButton(&b, "pause", icon, label, false)
 	iconButton(&b, "refresh-logs", "refresh-cw", "刷新日志", false)
 	b.WriteString(`</div></header><div class="docker-log-scroll" data-ref="log-scroll" data-pencode-scroll="end" data-pencode-scroll-key="` + m.selected.ID + `" data-pencode-selectable><div data-ref="log-notice" data-pencode-region>`)
