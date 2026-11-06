@@ -1,4 +1,4 @@
-github.com/pencode-labs/pencode v0.0.0-20261105144110-5e7e6f0c8cd9 h1:OyBsRV8pfBd6S1WYV9oiqrFANnISDMfi9Xn5BfGeMFk=
-github.com/pencode-labs/pencode v0.0.0-20261105144110-5e7e6f0c8cd9/go.mod h1:7fMJQW6E2Ctqu/G/gN32TvCCFuFbNY1HkDabUOmUwfI=
+github.com/pencode-labs/pencode v0.1.0-rc.1 h1:p2r/FN189MkcB9R92Nxm0qPzN1tlURng6HwImekJVv0=
+github.com/pencode-labs/pencode v0.1.0-rc.1/go.mod h1:7fMJQW6E2Ctqu/G/gN32TvCCFuFbNY1HkDabUOmUwfI=
 golang.org/x/net v0.61.0 h1:RR+6j/BTBCrggOLugxa+66R8FvoN6MHlzDlZIbN9YFw=
 golang.org/x/net v0.61.0/go.mod h1:WgDCOTH8iwtB66T4/GfI94AHo/hhdb7Hah9NDseQfiI=
