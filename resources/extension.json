@@ -1,7 +1,7 @@
 {
   "id": "docker",
   "name": "Docker 管理器",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "publisher": "Pencode",
   "description": "从标题栏管理 Docker 容器，启动、停止、重启容器并查看自动刷新的日志。",
   "entry": "bin/docker"
