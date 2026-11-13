@@ -37,3 +37,24 @@ Push a `v*` tag to build Linux, macOS and Windows release archives for amd64 and
 ## License
 
 MIT. The container icon is from Lucide under its ISC license; see `resources/LUCIDE-LICENSE.txt`.
+
+## Releases
+
+Push a version tag such as `v0.1.0` to test, cross-compile and publish a GitHub
+Release automatically. Linux, macOS (`darwin`) and Windows each support `amd64`
+and `arm64`. Prerelease tags such as `v0.2.0-rc.1` create prereleases.
+
+Assets use `<extension-id>-<tag>-<os>-<arch>.zip`, accompanied by `SHA256SUMS`.
+Each ZIP has one top-level `<extension-id>/` directory containing `bin/`,
+`resources/extension.json`, the README, license and all resource notices. The
+packaged manifest uses the tag version and Windows entries include `.exe`.
+
+Download the archive matching the **workspace server's** OS and architecture.
+Extract it directly into `~/.pencode/extensions/` (Windows:
+`%USERPROFILE%/.pencode/extensions/`), preserving executable permissions. For
+example, `unzip docker-v0.1.0-linux-amd64.zip -d ~/.pencode/extensions/` installs
+`~/.pencode/extensions/docker/resources/extension.json`. Restart Pencode to discover the extension.
+For remote workspaces, extract on the remote server. You can also select the
+extracted `<extension-id>/` directory in the extension manager's local-directory
+installation flow. No Go toolchain is needed to use a release package; extension
+specific tools described above still need to be available on the workspace server.
