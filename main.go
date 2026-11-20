@@ -227,6 +227,9 @@ func (m *manager) event(e peb.UIEvent) error {
 				return nil
 			}
 			switch e.Event.Ref {
+			case "clear-logs":
+				m.stopLogs()
+				m.logs, m.logError = "", ""
 			case "refresh-logs":
 				m.loadLogs(true)
 			case "pause":

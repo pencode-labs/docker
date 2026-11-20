@@ -6,6 +6,7 @@ A Docker container manager using Pencode's native extension UI and current theme
 - Start, stop or restart containers. Actions run in the background and refresh the list when complete.
 - Click a container to open its logs in the bottom panel, with timestamps and both stdout and stderr.
 - Lists and visible logs refresh every three seconds. Logs show the latest 300 lines, bounded to 256 KiB. Auto-scroll follows new output until you scroll up; pause automatic refresh to inspect or copy logs.
+- Clear the currently displayed logs from the panel without affecting the container.
 - Hidden or closed surfaces stop polling; closing a surface cancels its pending read. An already requested start/stop/restart continues until it completes or the extension shuts down.
 
 ## Build and install

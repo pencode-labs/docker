@@ -107,9 +107,10 @@ func (m *manager) showLogs() error {
 		label, icon = "恢复自动刷新", "debug-start"
 	}
 	b.WriteString(`<section class="docker-logs" data-pencode-layout="fill"><header class="docker-log-header"><strong class="docker-log-title">Docker 日志 · ` + html.EscapeString(m.selected.Names) + `</strong><span class="docker-log-hint docker-muted">最近 300 行 · 含时间戳</span><div class="docker-actions" role="group" aria-label="日志操作">`)
-	iconButton(&b, "back", "arrow-right", "容器列表", false)
+	iconButton(&b, "back", "list-collapse", "容器列表", false)
 	iconButton(&b, "pause", icon, label, false)
 	iconButton(&b, "refresh-logs", "refresh-cw", "刷新日志", false)
+	iconButton(&b, "clear-logs", "clear-all", "清屏", m.logs == "" && m.logError == "")
 	b.WriteString(`</div></header><div class="docker-log-scroll" data-ref="log-scroll" data-pencode-scroll="end" data-pencode-scroll-key="` + m.selected.ID + `" data-pencode-selectable><div data-ref="log-notice" data-pencode-region>`)
 	if m.logError != "" {
 		b.WriteString(`<p class="docker-error" role="alert">` + html.EscapeString(m.logError) + `</p>`)
@@ -125,5 +126,5 @@ func (m *manager) showLogs() error {
 	b.WriteString(html.EscapeString(m.logs))
 	b.WriteString(`</pre></div></section>`)
 	return m.publisher.Show(peb.UI{ID: "logs", Title: "Docker 日志 · " + m.selected.Names, Kind: peb.Panel, Context: m.logContext,
-		View: &peb.EditorView{HTML: b.String(), CSS: themeCSS, Events: []peb.EditorBinding{{Ref: "back", Kind: "click"}, {Ref: "pause", Kind: "click"}, {Ref: "refresh-logs", Kind: "click"}}}})
+		View: &peb.EditorView{HTML: b.String(), CSS: themeCSS, Events: []peb.EditorBinding{{Ref: "back", Kind: "click"}, {Ref: "pause", Kind: "click"}, {Ref: "refresh-logs", Kind: "click"}, {Ref: "clear-logs", Kind: "click"}}}})
 }

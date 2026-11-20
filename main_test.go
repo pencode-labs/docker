@@ -112,6 +112,9 @@ func TestContainerLifecycleAndLogs(t *testing.T) {
 	if ui.Kind != peb.Panel || strings.Contains(ui.View.HTML, "<script>") || !strings.Contains(ui.View.HTML, `data-pencode-scroll="end"`) || !publisher.latest("containers").Close {
 		t.Fatalf("escaped logs in following panel: %+v", ui)
 	}
+	if !strings.Contains(ui.View.HTML, `data-pencode-icon="list-collapse"`) || !strings.Contains(ui.View.HTML, `data-pencode-icon="clear-all"`) {
+		t.Fatal("log controls must use list and clear icons")
+	}
 	if args := <-calls; !slices.Equal(args, []string{"logs", "--tail", "300", "--timestamps", "--", testID}) {
 		t.Fatalf("log args: %q", args)
 	}
@@ -125,6 +128,12 @@ func TestContainerLifecycleAndLogs(t *testing.T) {
 	app.mu.Unlock()
 	if !paused || loading || !strings.Contains(publisher.latest("logs").View.HTML, "恢复自动刷新") {
 		t.Fatal("pause state was not rendered")
+	}
+	if err := app.event(click("logs", "clear-logs")); err != nil {
+		t.Fatal(err)
+	}
+	if ui := publisher.latest("logs"); strings.Contains(ui.View.HTML, "&lt;script&gt;") || !strings.Contains(ui.View.HTML, "暂无日志") || !strings.Contains(ui.View.HTML, `data-pencode-icon="clear-all"`) {
+		t.Fatal("clear logs did not clear the visible output")
 	}
 }
 
