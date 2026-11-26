@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"slices"
 	"strings"
@@ -109,11 +110,13 @@ func TestContainerLifecycleAndLogs(t *testing.T) {
 		return ui.View != nil && strings.Contains(ui.View.HTML, "&lt;script&gt;")
 	})
 	ui = publisher.latest("logs")
-	if ui.Kind != peb.Panel || strings.Contains(ui.View.HTML, "<script>") || !strings.Contains(ui.View.HTML, `data-pencode-scroll="end"`) || !publisher.latest("containers").Close {
+	if ui.Kind != peb.Panel || strings.Contains(ui.View.HTML, "<script>") || !strings.Contains(ui.View.HTML, `data-pencode-terminal-output="`) || !publisher.latest("containers").Close {
 		t.Fatalf("escaped logs in following panel: %+v", ui)
 	}
-	if !strings.Contains(ui.View.HTML, `data-pencode-icon="list-collapse"`) || !strings.Contains(ui.View.HTML, `data-pencode-icon="clear-all"`) {
-		t.Fatal("log controls must use list and clear icons")
+	if strings.Contains(ui.View.HTML, `data-ref="back"`) || !strings.Contains(ui.View.HTML, `data-pencode-icon="clear-all"`) ||
+		!strings.Contains(ui.View.HTML, `<option selected="" value="`+testID+`">web</option>`) ||
+		!slices.Contains(ui.View.Events, peb.EditorBinding{Ref: "log-container", Kind: "change"}) {
+		t.Fatal("log panel must show the selected container and clear action")
 	}
 	if args := <-calls; !slices.Equal(args, []string{"logs", "--tail", "300", "--timestamps", "--", testID}) {
 		t.Fatalf("log args: %q", args)
@@ -222,17 +225,53 @@ func TestLogSwitchDiscardsOldResponse(t *testing.T) {
 		t.Fatal(err)
 	}
 	<-started
-	app.mu.Lock()
-	app.listOpen = true
-	app.mu.Unlock()
-	if err := app.event(click("containers", "logs:"+other.ID)); err != nil {
-		t.Fatal(err)
+	change := peb.UIEvent{ID: "logs", Event: peb.EditorEvent{Kind: "change", Ref: "log-container"}}
+	for _, id := range []string{"unknown", testID, other.ID} {
+		change.Event.Value = id
+		if err := app.event(change); err != nil {
+			t.Fatal(err)
+		}
 	}
 	waitFor(t, func() bool {
 		return strings.Contains(publisher.latest("logs").View.HTML, "second container log")
 	})
-	if strings.Contains(publisher.latest("logs").View.HTML, "stale log") {
-		t.Fatal("previous container's output replaced the new selection")
+	ui := publisher.latest("logs")
+	if strings.Contains(ui.View.HTML, "stale log") || !strings.Contains(ui.View.HTML, `<option selected="" value="`+other.ID+`">second</option>`) ||
+		!strings.Contains(ui.View.HTML, `data-pencode-terminal-output="`+other.ID+`"`) || !publisher.latest("containers").Close {
+		t.Fatal("switching in the panel must select the new stream and keep the popup closed")
+	}
+}
+
+func TestPausedLogPanelRefreshesContainerChoices(t *testing.T) {
+	publisher := &recordingPublisher{}
+	const newID = "abcdef012345"
+	app := manager{ctx: t.Context(), publisher: publisher, listOpen: true, containers: []container{{ID: testID, Names: "web"}}, run: func(_ context.Context, args ...string) (string, error) {
+		if args[0] == "ps" {
+			return strings.NewReplacer(testID, newID, `"web"`, `"worker"`).Replace(testList), nil
+		}
+		return "output from " + args[len(args)-1], nil
+	}}
+	if err := app.event(click("containers", "logs:"+testID)); err != nil {
+		t.Fatal(err)
+	}
+	if err := app.event(click("logs", "pause")); err != nil {
+		t.Fatal(err)
+	}
+	app.mu.Lock()
+	app.loadList()
+	app.mu.Unlock()
+	waitFor(t, func() bool {
+		return strings.Contains(publisher.latest("logs").View.HTML, `<option value="`+newID+`">worker</option>`)
+	})
+	if !strings.Contains(publisher.latest("logs").View.HTML, "web（已移除）") {
+		t.Fatal("a removed container's logs were relabeled")
+	}
+	if err := app.event(peb.UIEvent{ID: "logs", Event: peb.EditorEvent{Kind: "change", Ref: "log-container", Value: newID}}); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, func() bool { return strings.Contains(publisher.latest("logs").View.HTML, "output from "+newID) })
+	if !strings.Contains(publisher.latest("logs").View.HTML, "恢复自动刷新") {
+		t.Fatal("switching containers must preserve the user's pause setting")
 	}
 }
 
@@ -263,4 +302,79 @@ func TestFailedOperationAndUntrustedEvents(t *testing.T) {
 		ui := publisher.latest("containers")
 		return ui.View != nil && strings.Contains(ui.View.HTML, "daemon unavailable &lt;retry&gt;")
 	})
+}
+
+func TestCollapsedGroupOperations(t *testing.T) {
+	const prefix = "xiuxing-dev-"
+	containers := []container{
+		{ID: "111111111111", Names: prefix + "mysql-1", State: "running"},
+		{ID: "222222222222", Names: prefix + "php-1", State: "exited"},
+		{ID: "333333333333", Names: prefix + "redis-1", State: "running"},
+		{ID: "444444444444", Names: "xiuxing2-dev-other", State: "running"},
+	}
+	for _, tc := range []struct {
+		action string
+		icon   string
+		ids    []string
+	}{
+		{"start", "debug-start", []string{containers[1].ID}}, {"stop", "debug-stop", []string{containers[0].ID, containers[2].ID}},
+		{"restart", "refresh-cw", []string{containers[0].ID, containers[1].ID, containers[2].ID}},
+	} {
+		t.Run(tc.action, func(t *testing.T) {
+			publisher := &recordingPublisher{}
+			calls := make(chan []string, 4)
+			var snapshot strings.Builder
+			encoder := json.NewEncoder(&snapshot)
+			for _, c := range containers {
+				if err := encoder.Encode(c); err != nil {
+					t.Fatal(err)
+				}
+			}
+			app := manager{ctx: t.Context(), publisher: publisher, listOpen: true, containers: containers, run: func(_ context.Context, args ...string) (string, error) {
+				calls <- args
+				if args[0] == "ps" {
+					return snapshot.String(), nil
+				}
+				return "", nil
+			}}
+			press := func(ref string) {
+				t.Helper()
+				if err := app.event(click("containers", ref)); err != nil {
+					t.Fatal(err)
+				}
+			}
+			press("toggle:group:" + prefix)
+			collapsed := func() bool {
+				h := publisher.latest("containers").View.HTML
+				return strings.Contains(h, `aria-expanded="false"`) && !strings.Contains(h, `data-ref="logs:`+containers[0].ID+`"`) && strings.Contains(h, `data-ref="logs:`+containers[3].ID+`"`)
+			}
+			if !collapsed() {
+				t.Fatal("collapse must hide only the group's members")
+			}
+			view := publisher.latest("containers").View
+			for _, target := range []string{"group:" + prefix, containers[3].ID} {
+				ref := tc.action + ":" + target
+				if !strings.Contains(view.HTML, `<img alt="" data-pencode-icon="`+tc.icon+`" data-ref="`+ref+`-icon"></button>`) ||
+					!slices.Contains(view.Events, peb.EditorBinding{Ref: ref, Kind: "click"}) {
+					t.Fatalf("%s is missing its icon or click binding", ref)
+				}
+			}
+			press(tc.action + ":group:xiuxing-")
+			press(tc.action + ":group:" + prefix)
+			if args := <-calls; !slices.Equal(args, append([]string{tc.action, "--"}, tc.ids...)) {
+				t.Fatalf("unexpected group operation %q", args)
+			}
+			if args := <-calls; args[0] != "ps" {
+				t.Fatalf("expected post-operation refresh, got %q", args)
+			}
+			waitFor(t, func() bool { app.mu.Lock(); defer app.mu.Unlock(); return !app.listLoading && app.busyAction == "" })
+			if !collapsed() {
+				t.Fatal("refresh lost collapsed state")
+			}
+			press("toggle:group:" + prefix)
+			if !strings.Contains(publisher.latest("containers").View.HTML, `data-ref="logs:`+containers[1].ID+`"`) {
+				t.Fatal("expanded group must restore individual controls")
+			}
+		})
+	}
 }

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"iter"
 	"os/exec"
 	"slices"
 	"strings"
@@ -29,6 +30,35 @@ func (c container) allows(action string) bool {
 		return c.State == "running" || c.State == "restarting" || c.State == "paused" || c.State == "exited"
 	}
 	return false
+}
+
+// Names are sorted by decodeContainers. Only group complete name components,
+// so similarly spelled services such as api and apiserver stay separate.
+func containerGroups(sorted []container) iter.Seq2[string, []container] {
+	return func(yield func(string, []container) bool) {
+		for containers := sorted; len(containers) > 0; {
+			first := containers[0].Names
+			end := 1
+			prefix := ""
+			if sep := strings.IndexAny(first, "-_."); sep > 0 {
+				for end < len(containers) && strings.HasPrefix(containers[end].Names, first[:sep+1]) {
+					end++
+				}
+				if end > 1 {
+					last := containers[end-1].Names
+					common := 0
+					for common < len(first) && common < len(last) && first[common] == last[common] {
+						common++
+					}
+					prefix = first[:strings.LastIndexAny(first[:common], "-_.")+1]
+				}
+			}
+			if !yield(prefix, containers[:end]) {
+				return
+			}
+			containers = containers[end:]
+		}
+	}
 }
 
 func validID(id string) bool {

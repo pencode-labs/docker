@@ -3,8 +3,8 @@
 A Docker container manager using Pencode's native extension UI and current theme.
 
 - Click the container icon in the top-right title bar to list all containers in the current Docker context, including stopped containers.
-- Start, stop or restart containers. Actions run in the background and refresh the list when complete.
-- Click a container to open its logs in the bottom panel, with timestamps and both stdout and stderr.
+- Names sharing a prefix such as `xiuxing-dev-` appear in a collapsible group. Start, stop or restart one container or the eligible members of the group. Actions run in the background and refresh the list when complete.
+- Click a container to open its logs in the bottom panel. Use the container selector in the panel header to switch logs, including while automatic refresh is paused. The panel shows timestamped stdout and stderr using the configured code font and interprets ANSI colors and cursor controls.
 - Lists and visible logs refresh every three seconds. Logs show the latest 300 lines, bounded to 256 KiB. Auto-scroll follows new output until you scroll up; pause automatic refresh to inspect or copy logs.
 - Clear the currently displayed logs from the panel without affecting the container.
 - Hidden or closed surfaces stop polling; closing a surface cancels its pending read. An already requested start/stop/restart continues until it completes or the extension shuts down.

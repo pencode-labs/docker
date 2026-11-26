@@ -18,30 +18,33 @@ type uiPublisher interface {
 }
 
 type manager struct {
-	publisher      uiPublisher
-	ctx            context.Context
-	run            func(context.Context, ...string) (string, error)
-	listCancel     context.CancelFunc
-	logCancel      context.CancelFunc
-	selected       container
-	logs           string
-	listError      string
-	logError       string
-	operationError string
-	busyID         string
-	busyAction     string
-	containers     []container
-	listContext    peb.ActionContext
-	logContext     peb.ActionContext
-	listGeneration uint64
-	logGeneration  uint64
-	mu             sync.Mutex
-	listOpen       bool
-	listLoading    bool
-	logsOpen       bool
-	logsVisible    bool
-	logLoading     bool
-	paused         bool
+	publisher        uiPublisher
+	ctx              context.Context
+	run              func(context.Context, ...string) (string, error)
+	listCancel       context.CancelFunc
+	logCancel        context.CancelFunc
+	selected         container
+	logOptions       string
+	logs             string
+	listError        string
+	logError         string
+	operationError   string
+	collapsed        map[string]bool
+	busyAction       string
+	containers       []container
+	listContext      peb.ActionContext
+	logContext       peb.ActionContext
+	listGeneration   uint64
+	logGeneration    uint64
+	mu               sync.Mutex
+	listOpen         bool
+	listLoading      bool
+	listLoadingShown bool
+	logsOpen         bool
+	logsVisible      bool
+	logLoading       bool
+	logLoadingShown  bool
+	paused           bool
 }
 
 func main() {
@@ -71,7 +74,7 @@ func (m *manager) poll() {
 			return
 		case <-ticker.C:
 			m.mu.Lock()
-			m.loadList(false)
+			m.loadList()
 			m.loadLogs(false)
 			m.mu.Unlock()
 		}
@@ -82,14 +85,14 @@ func (m *manager) open(c peb.ActionContext) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.listOpen, m.listContext = true, c
-	m.loadList(true)
+	m.loadList()
 	return m.showList()
 }
 
 // All state and publication below is protected by mu. Docker I/O always runs
 // outside the lock, so handlers acknowledge within the host's five-second limit.
-func (m *manager) loadList(manual bool) {
-	if !m.listOpen || m.listLoading {
+func (m *manager) loadList() {
+	if (!m.listOpen && !m.logsVisible) || m.listLoading {
 		return
 	}
 	m.listLoading = true
@@ -105,17 +108,21 @@ func (m *manager) loadList(manual bool) {
 		}
 		m.mu.Lock()
 		defer m.mu.Unlock()
-		if generation != m.listGeneration || !m.listOpen {
+		if generation != m.listGeneration {
 			return
 		}
 		m.listLoading = false
 		message := errorText(err)
-		changed := manual || message != m.listError || !slices.Equal(containers, m.containers)
+		changed := err == nil && !slices.Equal(containers, m.containers)
+		refreshList := m.listOpen && (m.listLoadingShown || message != m.listError || changed)
 		m.listError = message
-		if err == nil {
-			m.containers = containers
-		}
 		if changed {
+			m.containers = containers
+			if m.logsOpen && m.updateLogOptions() && m.logsVisible {
+				m.publish(m.showLogs())
+			}
+		}
+		if refreshList {
 			m.publish(m.showList())
 		}
 	}()
@@ -139,7 +146,7 @@ func (m *manager) loadLogs(manual bool) {
 		}
 		m.logLoading = false
 		message := errorText(err)
-		changed := manual || message != m.logError || output != m.logs
+		changed := manual || m.logLoadingShown || message != m.logError || output != m.logs
 		m.logError = message
 		if err == nil {
 			m.logs = output
@@ -158,12 +165,27 @@ func (m *manager) stopList() {
 	m.listLoading = false
 }
 
+func (m *manager) stopUnusedList() {
+	if !m.listOpen && !m.logsVisible {
+		m.stopList()
+	}
+}
+
 func (m *manager) stopLogs() {
 	if m.logCancel != nil {
 		m.logCancel()
 	}
 	m.logGeneration++
 	m.logLoading = false
+}
+
+func (m *manager) selectLogs(c container) error {
+	m.stopLogs()
+	m.selected = c
+	m.logs, m.logError = "", ""
+	m.updateLogOptions()
+	m.loadLogs(true)
+	return m.showLogs()
 }
 
 func (m *manager) event(e peb.UIEvent) error {
@@ -173,18 +195,51 @@ func (m *manager) event(e peb.UIEvent) error {
 	case "containers":
 		if e.Event.Kind == "close" {
 			m.listOpen = false
-			m.stopList()
+			m.stopUnusedList()
 			return nil
 		}
 		if !m.listOpen || e.Event.Kind != "click" {
 			return nil
 		}
 		if e.Event.Ref == "refresh" {
-			m.loadList(true)
+			m.loadList()
 			return m.showList()
 		}
 		action, id, ok := strings.Cut(e.Event.Ref, ":")
 		if !ok {
+			return nil
+		}
+		if group, ok := strings.CutPrefix(id, "group:"); ok {
+			for prefix, members := range containerGroups(m.containers) {
+				if prefix == "" || prefix != group {
+					continue
+				}
+				if action == "toggle" {
+					if m.collapsed == nil {
+						m.collapsed = make(map[string]bool)
+					}
+					if m.collapsed[prefix] {
+						delete(m.collapsed, prefix)
+					} else {
+						m.collapsed[prefix] = true
+					}
+					return m.showList()
+				}
+				if m.busyAction != "" {
+					return nil
+				}
+				var ids []string
+				for _, c := range members {
+					if c.allows(action) {
+						ids = append(ids, c.ID)
+					}
+				}
+				if len(ids) > 0 {
+					m.operate(action, ids...)
+					return m.showList()
+				}
+				break
+			}
 			return nil
 		}
 		for _, c := range m.containers {
@@ -192,40 +247,50 @@ func (m *manager) event(e peb.UIEvent) error {
 				continue
 			}
 			if action == "logs" {
-				m.stopLogs()
-				m.selected, m.logContext = c, e.Context
-				m.logs, m.logError = "", ""
+				m.logContext = e.Context
 				m.logsOpen, m.logsVisible, m.paused = true, true, false
-				m.loadLogs(true)
-				if err := m.showLogs(); err != nil {
+				if err := m.selectLogs(c); err != nil {
 					return err
 				}
 				m.listOpen = false
-				m.stopList()
 				return m.publisher.CloseUI("containers")
 			}
-			if m.busyID == "" && c.allows(action) {
+			if m.busyAction == "" && c.allows(action) {
 				m.operate(action, id)
 				return m.showList()
 			}
 			break
 		}
 	case "logs":
+		if !m.logsOpen {
+			return nil
+		}
 		switch e.Event.Kind {
 		case "close":
 			m.logsOpen, m.logsVisible = false, false
 			m.stopLogs()
+			m.stopUnusedList()
 		case "visibilitychange":
 			m.logsVisible = e.Event.Value == "visible"
 			if !m.logsVisible {
 				m.stopLogs()
-			} else if !m.paused {
-				m.loadLogs(true)
+				m.stopUnusedList()
+			} else {
+				m.loadList()
+				if !m.paused {
+					m.loadLogs(true)
+				}
+				return m.showLogs()
+			}
+		case "change":
+			if e.Event.Ref == "log-container" && m.logsVisible && e.Event.Value != m.selected.ID {
+				for _, c := range m.containers {
+					if c.ID == e.Event.Value {
+						return m.selectLogs(c)
+					}
+				}
 			}
 		case "click":
-			if !m.logsOpen {
-				return nil
-			}
 			switch e.Event.Ref {
 			case "clear-logs":
 				m.stopLogs()
@@ -239,10 +304,8 @@ func (m *manager) event(e peb.UIEvent) error {
 				} else {
 					m.loadLogs(true)
 				}
-			case "back":
-				m.listContext, m.listOpen = e.Context, true
-				m.loadList(true)
-				return m.showList()
+			default:
+				return nil
 			}
 			return m.showLogs()
 		}
@@ -250,17 +313,17 @@ func (m *manager) event(e peb.UIEvent) error {
 	return nil
 }
 
-func (m *manager) operate(action, id string) {
-	m.busyID, m.busyAction, m.operationError = id, action, ""
+func (m *manager) operate(action string, ids ...string) {
+	m.busyAction, m.operationError = action, ""
 	go func() {
-		_, err := m.run(m.ctx, action, "--", id)
+		_, err := m.run(m.ctx, append([]string{action, "--"}, ids...)...)
 		m.mu.Lock()
 		defer m.mu.Unlock()
-		m.busyID, m.busyAction = "", ""
+		m.busyAction = ""
 		m.operationError = errorText(err)
 		// Discard a pre-operation snapshot before fetching the resulting state.
 		m.stopList()
-		m.loadList(true)
+		m.loadList()
 		if m.listOpen {
 			m.publish(m.showList())
 		} else if err != nil {
